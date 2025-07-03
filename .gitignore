@@ -1,0 +1,19 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore virtual environment
+venv/
+
+# Ignore SQLite (if you used it temporarily)
+*.sqlite3
+
+# Ignore Django secret files
+.env
+
+# Ignore VSCode/editor configs
+.vscode/
+.idea/
+
+# Ignore static files collected by collectstatic (if using)
+staticfiles/
