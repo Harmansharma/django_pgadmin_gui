@@ -1,0 +1,25 @@
+{% extends 'dashboard/base.html' %}
+
+{% block content %}
+<h2>ExampleTable Records</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Created At</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data %}
+        <tr>
+            <td>{{ row.name }}</td>
+            <td>{{ row.email }}</td>
+            <td>{{ row.created_at }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">No data</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

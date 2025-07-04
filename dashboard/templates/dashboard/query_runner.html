@@ -1,0 +1,39 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+<h4>Run SQL Query</h4>
+
+<form method="POST">
+  {% csrf_token %}
+  <div class="mb-3">
+    <textarea name="sql_query" class="form-control" rows="5" placeholder="Enter SQL here">{{ sql_query }}</textarea>
+  </div>
+  <button class="btn btn-primary">Run Query</button>
+</form>
+
+{% if error %}
+<div class="alert alert-danger mt-3">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+<div class="table-responsive mt-3">
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th>{{ col }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in result %}
+      <tr>
+        {% for val in row %}
+        <td>{{ val }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
