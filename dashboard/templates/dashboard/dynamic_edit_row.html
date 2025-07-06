@@ -1,0 +1,24 @@
+{% extends 'dashboard/base.html' %}
+{% load custom_filter %}
+
+{% block content %}
+<h4>Edit Row in {{ table_name }}</h4>
+
+{% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {% for col in columns %}
+        {% if col != "id" and col != "created_at" and col != "updated_at" %}
+            <div class="mb-2">
+                <label>{{ col }}</label>
+                <input type="text" name="{{ col }}" class="form-control"
+                       value="{{ row_data|get:col }}" {% if col == pk_column %}readonly{% endif %}>
+            </div>
+        {% endif %}
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Update</button>
+</form>
+{% endblock %}

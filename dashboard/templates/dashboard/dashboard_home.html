@@ -1,0 +1,31 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+<h3>📊 Dashboard</h3>
+
+<div class="row">
+  <!-- Add New Table Card -->
+  <div class="col-md-3 mb-3">
+    <div class="card h-100 border-success text-center">
+      <div class="card-body">
+        <h5 class="card-title text-success">➕ Add New Table</h5>
+        <p class="card-text">Create a new table in the database.</p>
+        <a href="{% url 'create_table' %}" class="btn btn-outline-success">Create Table</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Existing Tables -->
+  {% for table in tables %}
+    <div class="col-md-3 mb-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">{{ table }}</h5>
+          <p class="card-text">Manage table '{{ table }}'</p>
+          <a href="{% url 'dynamic_table_sql_crud' table %}" class="btn btn-primary btn-sm">Open</a>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}
+

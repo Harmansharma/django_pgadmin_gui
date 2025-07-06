@@ -1,0 +1,19 @@
+{% extends 'dashboard/base.html' %}
+{% load custom_filter %}
+{% block content %}
+<h4>🧾 {{ table_name|title }} Details (ID: {{ pk }})</h4>
+<table class="table table-bordered">
+  {% for col in columns %}
+    <tr>
+      <th>{{ col }}</th>
+      <td>{{ row_data|get:col }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
+<hr>
+<h5>📌 Related Records</h5>
+
+{% include 'dashboard/_related_recursive.html' with related_data=related_data depth=0 %}
+<a href="{% url 'dynamic_table_sql_crud' table_name %}" class="btn btn-secondary mt-3">🔙 Back</a>
+{% endblock %}

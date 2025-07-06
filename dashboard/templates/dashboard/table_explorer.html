@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-4">
+    <h5>📋 Tables</h5>
+    <ul class="list-group">
+      {% for table in tables %}
+        <li class="list-group-item {% if table == selected_table %}active{% endif %}">
+          <a href="?table={{ table }}">{{ table }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="col-md-8">
+    {% if selected_table %}
+      <h5>📌 Columns in {{ selected_table }}</h5>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            {% for col in columns %}<th>{{ col }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>{% for val in row %}<td>{{ val }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
