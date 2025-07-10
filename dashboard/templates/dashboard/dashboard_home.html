@@ -15,17 +15,30 @@
   </div>
 
   <!-- Existing Tables -->
-  {% for table in tables %}
-    <div class="col-md-3 mb-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <h5 class="card-title">{{ table }}</h5>
-          <p class="card-text">Manage table '{{ table }}'</p>
+{% for table in tables %}
+  <div class="col-md-3 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">{{ table }}</h5>
+        <p class="card-text">Manage table '{{ table }}'</p>
+
+        <div class="d-flex gap-2">
+          <!-- Open Table -->
           <a href="{% url 'dynamic_table_sql_crud' table %}" class="btn btn-primary btn-sm">Open</a>
+          <a href="{% url 'edit_table_view' table %}" class="btn btn-warning btn-sm">Edit</a>
+
+
+          <!-- Drop Table Form -->
+          <form method="post" action="{% url 'drop_table' table %}" onsubmit="return confirm('Are you sure you want to permanently drop table {{ table }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">Drop</button>
+          </form>
         </div>
+
       </div>
     </div>
-  {% endfor %}
+  </div>
+{% endfor %}
 </div>
 {% endblock %}
 

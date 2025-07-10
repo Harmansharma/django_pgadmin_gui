@@ -1,101 +1,190 @@
-{% extends 'dashboard/base.html' %}
-{% block content %}
-<h3 class="mb-3">🧱 Create New Table</h3>
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Create Table</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Create Table</h2>
 
-{% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
-{% endif %}
-{% if success %}
-    <div class="alert alert-success">{{ success }}</div>
-{% endif %}
-{% if generated_sql %}
-    <div class="alert alert-secondary">
-        <strong>📝 SQL Preview:</strong>
-        <pre>{{ generated_sql }}</pre>
-    </div>
-{% endif %}
+ <form method="post" onsubmit="return validateColumns()">
+  {% csrf_token %}
 
-<form method="post">
-    {% csrf_token %}
-    <div class="mb-3">
-        <label class="form-label">Table Name</label>
-        <input type="text" name="table_name" class="form-control" required>
-    </div>
+  <!-- Table Name -->
+  <div class="mb-3">
+    <label class="form-label">Table Name</label>
+    <input type="text" class="form-control" name="table_name" value="{{ table_name }}" required>
+  </div>
 
-    <h5 class="mt-4">Columns:</h5>
-    <div id="columns">
-        <!-- Column Row Template -->
-        <div class="row mb-2 align-items-center draggable">
-            <div class="col-md-2">
-                <input type="text" name="column_name[]" class="form-control" placeholder="Column name" required>
-            </div>
-            <div class="col-md-2">
-                <input type="text" name="data_type[]" class="form-control" placeholder="e.g., TEXT, INTEGER" required>
-            </div>
-            <div class="col-md-1">
-                <input type="checkbox" name="not_null[]" value="on" class="form-check-input"> NOT NULL
-            </div>
-            <div class="col-md-1">
-                <input type="checkbox" name="unique[]" value="on" class="form-check-input"> UNIQUE
-            </div>
-            <div class="col-md-1">
-                <input type="checkbox" name="primary_key[]" value="0" class="form-check-input pk-checkbox"> PK
+  <!-- Columns -->
+  <h5>Table Columns</h5>
+  <div id="columns-container">
+    {% if columns_data %}
+      {% for col, dtype, pk, nn, uq, default, fk, ref, idx in columns_data %}
+        <div class="card p-3 mb-3">
+          <div class="row g-2">
+            <div class="col-md-3">
+              <input type="text" name="column_name[]" class="form-control" value="{{ col }}" required>
             </div>
             <div class="col-md-2">
-                <input type="text" name="default_value[]" class="form-control" placeholder="Default value">
+              <select name="data_type[]" class="form-select">
+                <option value="INTEGER" {% if dtype == "INTEGER" %}selected{% endif %}>INTEGER</option>
+                <option value="VARCHAR(255)" {% if dtype == "VARCHAR(255)" %}selected{% endif %}>VARCHAR(255)</option>
+                <option value="TEXT" {% if dtype == "TEXT" %}selected{% endif %}>TEXT</option>
+                <option value="BOOLEAN" {% if dtype == "BOOLEAN" %}selected{% endif %}>BOOLEAN</option>
+                <option value="DATE" {% if dtype == "DATE" %}selected{% endif %}>DATE</option>
+                <option value="TIMESTAMP" {% if dtype == "TIMESTAMP" %}selected{% endif %}>TIMESTAMP</option>
+              </select>
             </div>
-            <div class="col-md-1">
-                <input type="checkbox" name="is_foreign[]" value="on" class="form-check-input fk-toggle"> FK
+            <div class="col-md-1 d-flex align-items-center">
+              <input type="checkbox" name="primary_key[]" value="{{ col }}" {% if pk %}checked{% endif %}> PK
             </div>
-            <div class="col-md-2 fk-fields d-none">
-                <input type="text" name="ref_table[]" class="form-control mb-1" placeholder="Ref Table">
-                <input type="text" name="ref_column[]" class="form-control" placeholder="Ref Column">
+            <div class="col-md-1 d-flex align-items-center">
+              <input type="checkbox" name="not_null[]" value="{{ col }}" {% if nn %}checked{% endif %}> NN
             </div>
+            <div class="col-md-1 d-flex align-items-center">
+              <input type="checkbox" name="unique[]" value="{{ col }}" {% if uq %}checked{% endif %}> UQ
+            </div>
+            <div class="col-md-2">
+              <input type="text" name="default_value[]" class="form-control" value="{{ default }}" placeholder="Default">
+            </div>
+            <div class="col-md-1 d-flex align-items-center">
+              <input type="checkbox" name="foreign_key[]" value="on" {% if fk %}checked{% endif %}> FK
+            </div>
+            <div class="col-md-3">
+              <input type="text" name="reference_table[]" class="form-control" value="{{ ref }}" placeholder="Ref (e.g., users(id))">
+            </div>
+            <div class="col-md-1 d-flex align-items-center">
+              <input type="checkbox" name="add_index[]" value="on" {% if idx %}checked{% endif %}> IDX
+            </div>
+          </div>
         </div>
-    </div>
+      {% endfor %}
+    {% endif %}
+  </div>
 
-    <button type="button" class="btn btn-secondary mt-2 mb-4" onclick="addColumn()">+ Add Column</button><br>
-    <button type="submit" name="preview_sql" class="btn btn-outline-info">🔍 Preview SQL</button>
-    <button type="submit" class="btn btn-primary">🛠️ Create Table</button>
+  <!-- Add Column Button -->
+  <button type="button" class="btn btn-outline-primary mt-2" onclick="addColumnRow()">+ Add Column</button>
+
+  <!-- Auto-created Columns -->
+  <div class="form-check mt-4">
+    <input class="form-check-input" type="checkbox" name="include_created" id="includeCreated" {% if include_created %}checked{% endif %}>
+    <label class="form-check-label" for="includeCreated">Include created_at</label>
+  </div>
+  <div class="form-check">
+    <input class="form-check-input" type="checkbox" name="include_updated" id="includeUpdated" {% if include_updated %}checked{% endif %}>
+    <label class="form-check-label" for="includeUpdated">Include updated_at</label>
+  </div>
+
+  <!-- Submit -->
+  <div class="mt-4">
+    <button type="submit" name="preview_sql" class="btn btn-secondary">Preview SQL</button>
+    <button type="submit" class="btn btn-success">Create Table</button>
+  </div>
+
+  <!-- Output -->
+  {% if generated_sql %}
+    <div class="alert alert-warning mt-3">
+      <strong>Generated SQL:</strong>
+      <pre>{{ generated_sql }}</pre>
+    </div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-danger mt-3">{{ error }}</div>
+  {% endif %}
 </form>
 
-<!-- Include jQuery & jQuery UI -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
-
+<!-- Scripts (same as before, but only add initial row if no data) -->
 <script>
-// Add new column row
-function addColumn() {
-    const original = document.querySelector('.draggable');
-    const clone = original.cloneNode(true);
-
-    // Clear input values
-    clone.querySelectorAll('input').forEach(input => {
-        if (input.type === 'text') input.value = '';
-        if (input.type === 'checkbox') input.checked = false;
-    });
-
-    // Hide FK fields
-    clone.querySelector('.fk-fields').classList.add('d-none');
-
-    document.getElementById('columns').appendChild(clone);
+function addColumnRow() {
+  const container = document.getElementById('columns-container');
+  const card = document.createElement('div');
+  card.className = 'card p-3 mb-3';
+  card.innerHTML = `
+    <div class="row g-2">
+      <div class="col-md-3">
+        <input type="text" name="column_name[]" class="form-control" placeholder="Column Name" required>
+      </div>
+      <div class="col-md-2">
+        <select name="data_type[]" class="form-select">
+          <option value="INTEGER">INTEGER</option>
+          <option value="VARCHAR(255)">VARCHAR(255)</option>
+          <option value="TEXT">TEXT</option>
+          <option value="BOOLEAN">BOOLEAN</option>
+          <option value="DATE">DATE</option>
+          <option value="TIMESTAMP">TIMESTAMP</option>
+        </select>
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="primary_key[]" value="" onclick="updatePKValues()"> PK
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="not_null[]" value="on"> NN
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="unique[]" value="on"> UQ
+      </div>
+      <div class="col-md-2">
+        <input type="text" name="default_value[]" class="form-control" placeholder="Default">
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="foreign_key[]" value="on"> FK
+      </div>
+     <div class="col-md-3">
+      <select name="reference_table[]" class="form-select">
+        <option value="">-- Select Foreign key--</option>
+        {% for table, column in fk_candidates %}
+          <option value="{{ table }}({{ column }})"
+            {% if ref_table_selected == table and ref_column_selected == column %}selected{% endif %}
+          >{{ table }}({{ column }})</option>
+        {% endfor %}
+      </select>
+    </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="add_index[]" value="on"> IDX
+      </div>
+    <div>
+     <button type="button"
+          class="btn btn-outline-danger btn-sm position-absolute"
+          style="top: 20px; right: 10px;"
+          onclick="this.closest('.card').remove()">
+     Delete
+  </button>
+    </div>
+    </div>
+  `;
+  container.appendChild(card);
 }
 
-// Enable drag-and-drop sorting
-$(function () {
-    $("#columns").sortable({ handle: ".draggable", axis: "y" });
-});
-
-// Show/hide foreign key fields
-document.addEventListener('change', function (e) {
-    if (e.target.classList.contains('fk-toggle')) {
-        const fkFields = e.target.closest('.draggable').querySelector('.fk-fields');
-        if (e.target.checked) {
-            fkFields.classList.remove('d-none');
-        } else {
-            fkFields.classList.add('d-none');
-        }
+function updatePKValues() {
+  const rows = document.querySelectorAll('#columns-container .card');
+  rows.forEach(row => {
+    const colInput = row.querySelector('input[name="column_name[]"]');
+    const pkCheckbox = row.querySelector('input[name="primary_key[]"]');
+    if (colInput && pkCheckbox) {
+      pkCheckbox.value = colInput.value.trim();
     }
-});
+  });
+}
+
+function validateColumns() {
+  const names = Array.from(document.querySelectorAll('input[name="column_name[]"]')).map(e => e.value.trim());
+  const uniqueNames = new Set(names);
+  if (uniqueNames.size < names.length) {
+    alert("❌ Duplicate column names are not allowed.");
+    return false;
+  }
+  return true;
+}
+
+window.onload = function() {
+  // Add a default column only if no existing data is rendered
+  const existing = document.getElementById('columns-container').children.length;
+  if (existing === 0) addColumnRow();
+};
 </script>
-{% endblock %}

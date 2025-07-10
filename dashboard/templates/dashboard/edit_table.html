@@ -1,0 +1,112 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+<div class="container mt-5">
+  <h3>Edit Table: {{ table_name }}</h3>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <!-- Existing Columns -->
+    {% for col in columns %}
+      <div class="card p-3 mb-2">
+        <input type="hidden" name="old_column_name[]" value="{{ col.name }}">
+        <div class="row g-2">
+          <div class="col-md-3">
+            <label>Column Name</label>
+            <input type="text" class="form-control" name="new_column_name[]" value="{{ col.name }}">
+          </div>
+
+          <div class="col-md-2">
+            <label>Data Type</label>
+            <select name="data_type[]" class="form-select">
+              <option value="INTEGER" {% if col.data_type == 'integer' %}selected{% endif %}>INTEGER</option>
+              <option value="VARCHAR(255)" {% if 'character' in col.data_type %}selected{% endif %}>VARCHAR(255)</option>
+              <option value="TEXT" {% if col.data_type == 'text' %}selected{% endif %}>TEXT</option>
+              <option value="BOOLEAN" {% if col.data_type == 'boolean' %}selected{% endif %}>BOOLEAN</option>
+              <option value="DATE" {% if col.data_type == 'date' %}selected{% endif %}>DATE</option>
+              <option value="TIMESTAMP" {% if 'timestamp' in col.data_type %}selected{% endif %}>TIMESTAMP</option>
+            </select>
+          </div>
+
+          <div class="col-md-1 d-flex align-items-center">
+            <input type="checkbox" class="form-check-input me-2" name="nullable[]" value="{{ col.name }}" {% if col.nullable %}checked{% endif %}>
+            <label class="form-check-label">NN</label>
+          </div>
+
+          <div class="col-md-1 d-flex align-items-center">
+            <input type="checkbox" name="add_index[]" value="{{ col.name }}"> IDX
+          </div>
+
+          <div class="col-md-2 d-flex align-items-center">
+            <input type="checkbox" class="form-check-input me-2" name="drop_column[]" value="{{ col.name }}">
+            <label class="form-check-label">Drop</label>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+
+    <!-- New Columns -->
+    <h5 class="mt-4">Add New Columns</h5>
+    <div id="columns-container"></div>
+    <button type="button" class="btn btn-outline-primary" onclick="addColumnRow()">+ Add Column</button>
+
+    <div class="mt-4">
+      <button type="submit" class="btn btn-success">Apply Changes</button>
+      <a href="{% url 'dashboard_home' %}" class="btn btn-secondary">Cancel</a>
+      <a href="{% url 'dynamic_table_sql_crud' table_name %}" class="btn btn-secondary">← Back to Table</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function addColumnRow() {
+  const container = document.getElementById('columns-container');
+  const index = container.children.length;
+  const fkOptions = `{% for table, column in fk_candidates %}
+  <option value="{{ table }}.{{ column }}">{{ table }}({{ column }})</option>
+  {% endfor %}`;
+
+  const card = document.createElement('div');
+  card.className = 'card p-3 mb-3';
+  card.innerHTML = `
+    <div class="row g-2">
+      <div class="col-md-3">
+        <input type="text" name="new_column_name_only[]" class="form-control" placeholder="Column Name" required>
+      </div>
+      <div class="col-md-2">
+        <select name="new_column_type[]" class="form-select">
+          <option value="INTEGER">INTEGER</option>
+          <option value="VARCHAR(255)">VARCHAR(255)</option>
+          <option value="TEXT">TEXT</option>
+          <option value="BOOLEAN">BOOLEAN</option>
+          <option value="DATE">DATE</option>
+          <option value="TIMESTAMP">TIMESTAMP</option>
+        </select>
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="new_column_nullable[]" value="${index}"> NN
+      </div>
+      <div class="col-md-1 d-flex align-items-center">
+        <input type="checkbox" name="add_index[]" value="new_${index}"> IDX
+      </div>
+      <div class="col-md-3">
+        <select name="new_column_fk[]" class="form-select">
+          <option value="">-- Select FK Reference --</option>
+          ${fkOptions}
+        </select>
+      </div>
+      <div class="col-md-2 text-end">
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.card').remove()"> Delete</button>
+      </div>
+    </div>
+  `;
+  container.appendChild(card);
+}
+</script>
+{% endblock %}

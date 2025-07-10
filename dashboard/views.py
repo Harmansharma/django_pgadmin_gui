@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render, redirect
 from django.apps import apps
 from django.forms import modelform_factory
@@ -5,7 +6,18 @@ from django.db import connection, DatabaseError
 from django.http import Http404
 from django.contrib import messages
 from .utils import get_all_tables 
-from .sql_runner import run_sql_query 
+from .sql_runner import run_sql_query
+from .utils import get_all_tables_with_columns
+from django.views.decorators.csrf import csrf_exempt
+
+
+RESERVED_WORDS = {
+    'select', 'from', 'where', 'table', 'insert', 'update', 'delete',
+    'join', 'order', 'group', 'by', 'limit', 'primary', 'key', 'foreign'
+}
+
+
+@csrf_exempt
 
 
 
@@ -219,99 +231,324 @@ def set_default_created_at(table_name, column='created_at'):
     except DatabaseError as e:
         print(f"[❌] Failed to set default on {table_name}.{column}: {str(e)}")
 
+
+def is_valid_identifier(name):
+    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name)) and name.lower() not in RESERVED_KEYWORDS
+
+
+
 def create_table_view(request):
     error = None
-    success = None
     generated_sql = None
+    table_name = ''
+    columns = []
+    data_types = []
+    primary_keys = []
+    not_nulls = []
+    uniques = []
+    default_values = []
+    foreign_keys = []
+    reference_tables = []
+    add_index = []
+    include_created = True
+    include_updated = True  
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT kcu.table_name, kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
+        """)
+        fk_candidates = cursor.fetchall()  # [('users', 'id'), ('products', 'product_id')]
 
     if request.method == 'POST':
         table_name = request.POST.get('table_name', '').strip()
         columns = request.POST.getlist('column_name[]')
         data_types = request.POST.getlist('data_type[]')
+        primary_keys = request.POST.getlist('primary_key[]')
         not_nulls = request.POST.getlist('not_null[]')
         uniques = request.POST.getlist('unique[]')
-        defaults = request.POST.getlist('default_value[]')
-        is_fk = request.POST.getlist('is_foreign[]')
-        ref_tables = request.POST.getlist('ref_table[]')
-        ref_columns = request.POST.getlist('ref_column[]')
-        pk_columns = request.POST.getlist('primary_key[]')
+        default_values = request.POST.getlist('default_value[]')
+        foreign_keys = request.POST.getlist('foreign_key[]')
+        reference_tables = request.POST.getlist('reference_table[]')
+        add_index = request.POST.getlist('add_index[]')
+        include_created = request.POST.get('include_created')
+        include_updated = request.POST.get('include_updated')
 
-        column_defs = []
-        fk_defs = []
+        # ✅ Validation
+        if not table_name or not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+            error = " Invalid table name."
+        elif any(col.strip().lower() in RESERVED_WORDS for col in columns):
+            error = " One or more column names are reserved words."
+        elif len(set(columns)) != len(columns):
+            error = " Duplicate column names are not allowed."
+        elif not all(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', col.strip()) for col in columns):
+            error = "Invalid column names. Use only letters, numbers, and underscores."
 
-        for i in range(len(columns)):
-            try:
-                name = columns[i].strip()
-                dtype = data_types[i].strip()
-            except IndexError:
-                continue  # Skip incomplete definitions
+        if not error:
+            col_defs = []
+            fk_constraints = []
+            index_statements = []
 
-            if not name or not dtype:
-                continue
+            for i in range(len(columns)):
+                col = columns[i].strip()
+                dtype = data_types[i].strip().upper()
 
-            col_def = f"{name} {dtype}"
-            if i < len(not_nulls) and not_nulls[i] == 'on':
-                col_def += " NOT NULL"
-            if i < len(uniques) and uniques[i] == 'on':
-                col_def += " UNIQUE"
-            if i < len(defaults) and defaults[i]:
-                col_def += f" DEFAULT {defaults[i]}"
+                if col in primary_keys and dtype == "INTEGER":
+                    dtype = "SERIAL"
 
-            column_defs.append(col_def)
+                definition = f"{col} {dtype}"
 
-            if (
-                i < len(is_fk)
-                and is_fk[i] == 'on'
-                and i < len(ref_tables)
-                and i < len(ref_columns)
-                and ref_tables[i] and ref_columns[i]
-            ):
-                fk_defs.append(f"FOREIGN KEY ({name}) REFERENCES {ref_tables[i]}({ref_columns[i]})")
+                if col in not_nulls:
+                    definition += " NOT NULL"
+                if col in uniques:
+                    definition += " UNIQUE"
+                if default_values[i].strip():
+                    default = default_values[i].strip()
+                    if not default.isdigit() and default.upper() not in ('TRUE', 'FALSE', 'CURRENT_TIMESTAMP', 'NOW()'):
+                        default = f"'{default}'"
+                    definition += f" DEFAULT {default}"
 
-        if pk_columns:
-            column_defs.append(f"PRIMARY KEY ({', '.join(pk_columns)})")
+                col_defs.append(definition)
 
-        column_defs.extend(fk_defs)
-        generated_sql = f"CREATE TABLE {table_name} (\n  " + ",\n  ".join(column_defs) + "\n);"
+                if i < len(foreign_keys) and foreign_keys[i] == "on":
+                    if i < len(reference_tables):
+                        fk_ref = reference_tables[i].strip()
+                        if fk_ref:  # ✅ Only parse if fk_ref is not empty
+                            try:
+                                ref_table, ref_column = fk_ref.rstrip(')').split('(')
+                                fk_constraints.append(f'FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_column})')
+                            except ValueError:
+                                error = f"❌ Invalid foreign key format for: {fk_ref}"
+                                break
 
-        if 'preview_sql' in request.POST:
-            return render(request, 'dashboard/create_table.html', {
-                'generated_sql': generated_sql,
-                'form_data': request.POST
-            })
+                # ✅ Index
+                if i < len(add_index) and add_index[i] == "on":
+                    index_statements.append(f'CREATE INDEX idx_{table_name}_{col} ON {table_name} ({col});')
 
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(generated_sql)
-            success = f"✅ Table '{table_name}' created successfully!"
-        except DatabaseError as e:
-            error = str(e)
+            if not error:
+                pk_cleaned = [pk for pk in primary_keys if pk.strip()]
+                if pk_cleaned:
+                    col_defs.append(f"PRIMARY KEY ({', '.join(pk_cleaned)})")
+
+                col_defs.extend(fk_constraints)
+
+                # Audit columns
+                if include_created:
+                    col_defs.append("created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                if include_updated:
+                    col_defs.append("updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+                generated_sql = f"CREATE TABLE {table_name} (\n  " + ",\n  ".join(col_defs) + "\n);"
+
+                # Only preview
+                if 'preview_sql' in request.POST:
+                    return render(request, 'dashboard/create_table.html', {
+                        'generated_sql': generated_sql,
+                        'error': error,
+                        'table_name': table_name,
+                        'columns_data': zip(columns, data_types, default_values, not_nulls, uniques, primary_keys, foreign_keys, reference_tables, add_index),
+                        'include_created': include_created,
+                        'include_updated': include_updated,
+                        'fk_candidates': fk_candidates
+                    })
+
+                # Execute SQL
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(generated_sql)
+                        for index_sql in index_statements:
+                            cursor.execute(index_sql)
+
+                    messages.success(request, f"✅ Table '{table_name}' created successfully!")
+                    return redirect('dashboard_home')
+
+                except DatabaseError as e:
+                    error = f"❌ Database Error: {str(e)}"
 
     return render(request, 'dashboard/create_table.html', {
-        'error': error,
-        'success': success,
         'generated_sql': generated_sql,
+        'error': error,
+        'table_name': table_name,
+        'columns_data': zip(columns, data_types, default_values, not_nulls, uniques, primary_keys, foreign_keys, reference_tables, add_index),
+        'include_created': include_created,
+        'include_updated': include_updated,
+        'fk_candidates': fk_candidates
     })
 
-    def add_updated_at_to_all_tables():
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-            """)
-            tables = [row[0] for row in cursor.fetchall()]
-            for table in tables:
-                try:
-                    cursor.execute(f"""
-                        ALTER TABLE {table}
-                        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    """)
-                    print(f"✅ Added updated_at to {table}")
-                except Exception as e:
-                    print(f"❌ Failed on {table}: {e}")
+def edit_table_view(request, table_name):
+    if request.method == 'POST':
+        try:
+            old_names = request.POST.getlist('old_column_name[]')
+            new_names = request.POST.getlist('new_column_name[]')
+            data_types = request.POST.getlist('data_type[]')
+            nullable = request.POST.getlist('nullable[]')
+            drop_columns = request.POST.getlist('drop_column[]')
+            index_fields = request.POST.getlist('add_index[]')
 
+            new_col_names = request.POST.getlist('new_column_name_only[]')
+            new_col_types = request.POST.getlist('new_column_type[]')
+            new_col_nullable = request.POST.getlist('new_column_nullable[]')
+            new_col_fks = request.POST.getlist('new_column_fk[]')
 
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = %s AND table_schema = 'public'
+                """, [table_name])
+                existing_columns = [row[0] for row in cursor.fetchall()]
+
+            alter_statements = []
+            index_statements = []  # ✅ Indexes will be handled separately
+
+            for i in range(len(old_names)):
+                old = old_names[i].strip()
+                new = new_names[i].strip()
+                dtype = data_types[i].strip()
+                is_nullable = old in nullable
+                is_drop = old in drop_columns
+
+                if is_drop:
+                    alter_statements.append(f'DROP COLUMN "{old}"')
+                    continue
+
+                if old != new:
+                    alter_statements.append(f'RENAME COLUMN "{old}" TO "{new}"')
+
+                alter_statements.append(f'ALTER COLUMN "{new}" TYPE {dtype}')
+                alter_statements.append(f'ALTER COLUMN "{new}" {"DROP" if is_nullable else "SET"} NOT NULL')
+
+                if new in index_fields:
+                    index_statements.append(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_{new} ON "{table_name}"("{new}")')
+
+            adding_new_columns = any(name.strip() for name in new_col_names)
+            if adding_new_columns:
+                if 'created_at' not in existing_columns:
+                    alter_statements.append('ADD COLUMN "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL')
+                if 'updated_at' not in existing_columns:
+                    alter_statements.append('ADD COLUMN "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL')
+
+            for i in range(len(new_col_names)):
+                name = new_col_names[i].strip()
+                if not name:
+                    continue
+
+                dtype = new_col_types[i].strip() or 'TEXT'
+                is_nullable = str(i) in new_col_nullable
+                fk = new_col_fks[i].strip()
+
+                col_def = f'"{name}" {dtype}'
+
+                if not is_nullable:
+                    col_def += ' NOT NULL'
+
+                alter_statements.append(f'ADD COLUMN {col_def}')
+
+                if fk and '.' in fk:
+                    ref_table, ref_column = fk.split('.')
+                    constraint_name = f'fk_{table_name}_{name}'
+                    alter_statements.append(
+                        f'ADD CONSTRAINT {constraint_name} FOREIGN KEY ("{name}") REFERENCES "{ref_table}"("{ref_column}")'
+                    )
+
+                if f'new_{i}' in index_fields:
+                    index_statements.append(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_{name} ON "{table_name}"("{name}")')
+
+            if alter_statements:
+                full_sql = f'ALTER TABLE "{table_name}"\n  ' + ',\n  '.join(alter_statements) + ';'
+                with connection.cursor() as cursor:
+                    cursor.execute(full_sql)
+
+            # ✅ Now execute CREATE INDEX separately
+            for stmt in index_statements:
+                with connection.cursor() as cursor:
+                    cursor.execute(stmt)
+
+            if alter_statements or index_statements:
+                messages.success(request, f"✅ Changes applied to table '{table_name}' successfully!")
+            else:
+                messages.info(request, "No changes were submitted.")
+
+            return redirect('edit_table_view', table_name=table_name)
+
+        except DatabaseError as e:
+            messages.error(request, f"❌ Error: {str(e)}")
+            return redirect('edit_table_view', table_name=table_name)
+
+    # GET request: Load existing column metadata
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_name = %s AND table_schema = 'public'
+        """, [table_name])
+        columns = cursor.fetchall()
+
+    formatted_columns = []
+    for col in columns:
+        formatted_columns.append({
+            'name': col[0],
+            'data_type': col[1],
+            'nullable': col[2] == 'YES',
+        })
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT table_name, column_name FROM information_schema.columns
+            WHERE table_schema = 'public'
+        """)
+        fk_candidates = cursor.fetchall()
+
+    return render(request, 'dashboard/edit_table.html', {
+        'table_name': table_name,
+        'columns': formatted_columns,
+        'fk_candidates': fk_candidates
+    })
+
+def drop_table_view(request, table_name):
+    if request.method == 'POST':
+        try:
+            with connection.cursor() as cursor:
+                # ✅ Correct FK dependency check
+                cursor.execute("""
+                    SELECT tc.table_name
+                    FROM information_schema.table_constraints AS tc
+                    JOIN information_schema.key_column_usage AS kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                        AND tc.constraint_schema = kcu.constraint_schema
+                    JOIN information_schema.constraint_column_usage AS ccu
+                        ON ccu.constraint_name = tc.constraint_name
+                        AND ccu.constraint_schema = tc.constraint_schema
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND ccu.table_name = %s;
+                """, [table_name])
+                
+                references = cursor.fetchall()
+
+                if references:
+                    dependent_tables = ", ".join(set(r[0] for r in references))
+                    messages.error(
+                        request,
+                        f" Cannot drop table '{table_name}' because it is referenced by: {dependent_tables}"
+                    )
+                    return redirect('dashboard_home')
+
+                # Safe to drop
+                cursor.execute(f'DROP TABLE "{table_name}" CASCADE')  # optional: CASCADE
+                messages.success(request, f"Table '{table_name}' dropped successfully!")
+                return redirect('dashboard_home')
+
+        except DatabaseError as e:
+            messages.error(request, f" Database error: {str(e)}")
+            return redirect('dashboard_home')
+
+    messages.warning(request, "⚠️ Invalid request method.")
+    return redirect('dashboard_home')
+
+     
 def fetch_related_data(table_name, pk_value, depth=0, visited=None):
     if visited is None:
         visited = set()

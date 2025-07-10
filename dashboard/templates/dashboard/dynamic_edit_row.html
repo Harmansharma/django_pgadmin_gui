@@ -15,7 +15,7 @@
             <div class="mb-2">
                 <label>{{ col }}</label>
                 <input type="text" name="{{ col }}" class="form-control"
-                       value="{{ row_data|get:col }}" {% if col == pk_column %}readonly{% endif %}>
+                       value="{{ row_data|get_item:col }}" {% if col == pk_column %}readonly{% endif %}>
             </div>
         {% endif %}
     {% endfor %}

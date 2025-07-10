@@ -1,5 +1,7 @@
 from django.urls import path
+from .views import drop_table_view
 from . import views
+
 
 urlpatterns = [
     path('', views.dashboard_view, name='dashboard_view'),
@@ -12,4 +14,7 @@ urlpatterns = [
     path('sql/', views.sql_editor, name='sql_editor'),
     path('dashboard/', views.dashboard_home, name='dashboard_home'),
     path('show/<str:table_name>/<str:pk>/', views.dynamic_show_row, name='dynamic_show_row'),
-    ]
+    path('edit-table/<str:table_name>/', views.edit_table_view, name='edit_table_view'),
+    path('drop_table/<str:table_name>/', drop_table_view, name='drop_table'),
+    
+]
