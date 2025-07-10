@@ -91,10 +91,9 @@ Live preview and result display for SQL outputs
 Built-in checks for:
 
 Reserved keyword restrictions (select, from, table, etc.)
-
 Duplicate/invalid column names
+Foreign key format validation eg.(employers(id))
 
-Foreign key format validation (table(column))
 ---
 
 ##View                               Description
