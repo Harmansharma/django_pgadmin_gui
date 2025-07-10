@@ -6,7 +6,7 @@
   {% for col in columns %}
     <tr>
       <th>{{ col }}</th>
-      <td>{{ row_data|get:col }}</td>
+      <td>{{ row_data|get_item:col }}</td>
     </tr>
   {% endfor %}
 </table>
