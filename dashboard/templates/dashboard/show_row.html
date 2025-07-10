@@ -1,0 +1,58 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+
+<h3>📄 {{ table_name|title }} - Details</h3>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<table class="table table-bordered">
+  <tbody>
+    {% for col in columns %}
+    <tr>
+      <th>{{ col }}</th>
+      <td>{{ row_data|get:col }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<a href="{% url 'dynamic_edit_row' table_name row_data.pk %}" class="btn btn-warning">Edit</a>
+<a href="{% url 'delete_row' table_name row_data.pk %}" class="btn btn-danger" onclick="return confirm('Are you sure?')">Delete</a>
+
+<hr>
+
+<h4>🔗 Related Records</h4>
+{% for rel_table, data in related_data.items %}
+  <h5>{{ rel_table|title }}</h5>
+  {% if data.rows %}
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        {% for col in data.columns %}
+          <th>{{ col }}</th>
+        {% endfor %}
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in data.rows %}
+        <tr>
+          {% for cell in row %}
+            <td>{{ cell }}</td>
+          {% endfor %}
+          <td>
+            <a href="{% url 'dynamic_edit_row' rel_table row.0 %}" class="btn btn-sm btn-outline-primary">Edit</a>
+            <a href="{% url 'delete_row' rel_table row.0 %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this row?')">Delete</a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="text-muted">No related records found.</p>
+  {% endif %}
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+<h3 class="mb-3">🧱 Create New Table</h3>
+
+{% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+{% if success %}
+    <div class="alert alert-success">{{ success }}</div>
+{% endif %}
+{% if generated_sql %}
+    <div class="alert alert-secondary">
+        <strong>📝 SQL Preview:</strong>
+        <pre>{{ generated_sql }}</pre>
+    </div>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">Table Name</label>
+        <input type="text" name="table_name" class="form-control" required>
+    </div>
+
+    <h5 class="mt-4">Columns:</h5>
+    <div id="columns">
+        <!-- Column Row Template -->
+        <div class="row mb-2 align-items-center draggable">
+            <div class="col-md-2">
+                <input type="text" name="column_name[]" class="form-control" placeholder="Column name" required>
+            </div>
+            <div class="col-md-2">
+                <input type="text" name="data_type[]" class="form-control" placeholder="e.g., TEXT, INTEGER" required>
+            </div>
+            <div class="col-md-1">
+                <input type="checkbox" name="not_null[]" value="on" class="form-check-input"> NOT NULL
+            </div>
+            <div class="col-md-1">
+                <input type="checkbox" name="unique[]" value="on" class="form-check-input"> UNIQUE
+            </div>
+            <div class="col-md-1">
+                <input type="checkbox" name="primary_key[]" value="0" class="form-check-input pk-checkbox"> PK
+            </div>
+            <div class="col-md-2">
+                <input type="text" name="default_value[]" class="form-control" placeholder="Default value">
+            </div>
+            <div class="col-md-1">
+                <input type="checkbox" name="is_foreign[]" value="on" class="form-check-input fk-toggle"> FK
+            </div>
+            <div class="col-md-2 fk-fields d-none">
+                <input type="text" name="ref_table[]" class="form-control mb-1" placeholder="Ref Table">
+                <input type="text" name="ref_column[]" class="form-control" placeholder="Ref Column">
+            </div>
+        </div>
+    </div>
+
+    <button type="button" class="btn btn-secondary mt-2 mb-4" onclick="addColumn()">+ Add Column</button><br>
+    <button type="submit" name="preview_sql" class="btn btn-outline-info">🔍 Preview SQL</button>
+    <button type="submit" class="btn btn-primary">🛠️ Create Table</button>
+</form>
+
+<!-- Include jQuery & jQuery UI -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
+<script>
+// Add new column row
+function addColumn() {
+    const original = document.querySelector('.draggable');
+    const clone = original.cloneNode(true);
+
+    // Clear input values
+    clone.querySelectorAll('input').forEach(input => {
+        if (input.type === 'text') input.value = '';
+        if (input.type === 'checkbox') input.checked = false;
+    });
+
+    // Hide FK fields
+    clone.querySelector('.fk-fields').classList.add('d-none');
+
+    document.getElementById('columns').appendChild(clone);
+}
+
+// Enable drag-and-drop sorting
+$(function () {
+    $("#columns").sortable({ handle: ".draggable", axis: "y" });
+});
+
+// Show/hide foreign key fields
+document.addEventListener('change', function (e) {
+    if (e.target.classList.contains('fk-toggle')) {
+        const fkFields = e.target.closest('.draggable').querySelector('.fk-fields');
+        if (e.target.checked) {
+            fkFields.classList.remove('d-none');
+        } else {
+            fkFields.classList.add('d-none');
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends 'dashboard/base.html' %}
+{% block content %}
+<h3>📋 Table: {{ table_name }}</h3>
+
+{% if error %}
+    <div class="alert alert-danger mt-3">{{ error }}</div>
+{% endif %}
+
+<h5 class="mt-4">➕ Add New Record</h5>
+<form method="post">
+    {% csrf_token %}
+    <div class="row">
+        {% for col in columns %}
+        <div class="col-md-4 mb-2">
+            <input type="text" name="{{ col }}" class="form-control" placeholder="{{ col }}">
+        </div>
+        {% endfor %}
+    </div>
+    <button type="submit" name="add_row" class="btn btn-primary">Insert</button>
+</form>
+
+<hr>
+
+<h5 class="mt-4">📄 Records (first 50)</h5>
+<table class="table table-bordered">
+    <thead class="table-light">
+        <tr>
+            {% for col in columns %}
+                <th>{{ col }}</th>
+            {% endfor %}
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            {% for cell in row %}
+                <td>{{ cell }}</td>
+            {% endfor %}
+            <td>
+                {% with pk_value=row.0 %}
+                <a href="{% url 'dynamic_show_row' table_name pk_value %}" class="btn btn-sm btn-info">👁 Show</a>
+                <a href="{% url 'dynamic_edit_row' table_name row.0 %}" class="btn btn-sm btn-warning">
+                        Edit
+                    </a>   
+                <a href="{% url 'delete_row' table_name pk_value %}" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Delete this row?')">Delete</a>
+                {% endwith %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

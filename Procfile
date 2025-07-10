@@ -1,0 +1,1 @@
+web: gunicorn django_pgadmin_gui.wsgi
