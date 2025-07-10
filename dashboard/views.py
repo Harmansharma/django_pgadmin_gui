@@ -89,7 +89,7 @@ def dynamic_table_sql_crud(request, table_name):
             """
             try:
                 with connection.cursor() as cursor:
-                    cursor.execute("SET TIME ZONE 'Asia/Kolkata';")  # ✅ Set IST
+                    cursor.execute("SET TIME ZONE 'Asia/Kolkata';")
                     cursor.execute(insert_sql, values)
                     messages.success(request, "Row inserted successfully.")
                     return redirect('dynamic_table_sql_crud', table_name=table_name)
@@ -175,7 +175,7 @@ def dynamic_edit_row(request, table_name, pk):
 
         try:
             with connection.cursor() as cursor:
-                cursor.execute("SET TIME ZONE 'Asia/Kolkata';")  # ✅ Set IST
+                cursor.execute("SET TIME ZONE 'Asia/Kolkata';")
                 cursor.execute(update_sql, values)
                 messages.success(request, "Row updated successfully.")
                 return redirect('dynamic_table_sql_crud', table_name=table_name)
@@ -224,12 +224,12 @@ def set_default_created_at(table_name, column='created_at'):
                     ALTER TABLE {table_name}
                     ALTER COLUMN {column} SET DEFAULT CURRENT_TIMESTAMP
                 """)
-                print(f"[✅] Default timestamp set for {column} in table {table_name}")
+                print(f" Default timestamp set for {column} in table {table_name}")
             else:
-                print(f"[ℹ️] Column {column} already has a default or does not exist.")
+                print(f" Column {column} already has a default or does not exist.")
 
     except DatabaseError as e:
-        print(f"[❌] Failed to set default on {table_name}.{column}: {str(e)}")
+        print(f" Failed to set default on {table_name}.{column}: {str(e)}")
 
 
 def is_valid_identifier(name):
@@ -278,7 +278,6 @@ def create_table_view(request):
         include_created = request.POST.get('include_created')
         include_updated = request.POST.get('include_updated')
 
-        # ✅ Validation
         if not table_name or not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
             error = " Invalid table name."
         elif any(col.strip().lower() in RESERVED_WORDS for col in columns):
@@ -317,7 +316,7 @@ def create_table_view(request):
                 if i < len(foreign_keys) and foreign_keys[i] == "on":
                     if i < len(reference_tables):
                         fk_ref = reference_tables[i].strip()
-                        if fk_ref:  # ✅ Only parse if fk_ref is not empty
+                        if fk_ref:
                             try:
                                 ref_table, ref_column = fk_ref.rstrip(')').split('(')
                                 fk_constraints.append(f'FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_column})')
@@ -325,7 +324,7 @@ def create_table_view(request):
                                 error = f"❌ Invalid foreign key format for: {fk_ref}"
                                 break
 
-                # ✅ Index
+                # Index
                 if i < len(add_index) and add_index[i] == "on":
                     index_statements.append(f'CREATE INDEX idx_{table_name}_{col} ON {table_name} ({col});')
 
@@ -363,11 +362,11 @@ def create_table_view(request):
                         for index_sql in index_statements:
                             cursor.execute(index_sql)
 
-                    messages.success(request, f"✅ Table '{table_name}' created successfully!")
+                    messages.success(request, f" Table '{table_name}' created successfully!")
                     return redirect('dashboard_home')
 
                 except DatabaseError as e:
-                    error = f"❌ Database Error: {str(e)}"
+                    error = f" Database Error: {str(e)}"
 
     return render(request, 'dashboard/create_table.html', {
         'generated_sql': generated_sql,
@@ -402,7 +401,7 @@ def edit_table_view(request, table_name):
                 existing_columns = [row[0] for row in cursor.fetchall()]
 
             alter_statements = []
-            index_statements = []  # ✅ Indexes will be handled separately
+            index_statements = []  #  Indexes will be handled separately
 
             for i in range(len(old_names)):
                 old = old_names[i].strip()
@@ -462,20 +461,20 @@ def edit_table_view(request, table_name):
                 with connection.cursor() as cursor:
                     cursor.execute(full_sql)
 
-            # ✅ Now execute CREATE INDEX separately
+            #  Now execute CREATE INDEX separately
             for stmt in index_statements:
                 with connection.cursor() as cursor:
                     cursor.execute(stmt)
 
             if alter_statements or index_statements:
-                messages.success(request, f"✅ Changes applied to table '{table_name}' successfully!")
+                messages.success(request, f" Changes applied to table '{table_name}' successfully!")
             else:
                 messages.info(request, "No changes were submitted.")
 
             return redirect('edit_table_view', table_name=table_name)
 
         except DatabaseError as e:
-            messages.error(request, f"❌ Error: {str(e)}")
+            messages.error(request, f" Error: {str(e)}")
             return redirect('edit_table_view', table_name=table_name)
 
     # GET request: Load existing column metadata
@@ -512,7 +511,7 @@ def drop_table_view(request, table_name):
     if request.method == 'POST':
         try:
             with connection.cursor() as cursor:
-                # ✅ Correct FK dependency check
+                #  Correct FK dependency check
                 cursor.execute("""
                     SELECT tc.table_name
                     FROM information_schema.table_constraints AS tc
@@ -545,7 +544,7 @@ def drop_table_view(request, table_name):
             messages.error(request, f" Database error: {str(e)}")
             return redirect('dashboard_home')
 
-    messages.warning(request, "⚠️ Invalid request method.")
+    messages.warning(request, " Invalid request method.")
     return redirect('dashboard_home')
 
      
